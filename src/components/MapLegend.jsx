@@ -61,7 +61,7 @@ export default function MapLegend({ busCount, stopCount }) {
             {ROUTES.map((r) => (
               <div key={r.id} className="flex items-center gap-2 mb-1.5">
                 <div
-                  className="w-6 h-2 rounded-full flex-shrink-0"
+                  className="w-6 h-2 rounded-full shrink-0"
                   style={{ background: r.color }}
                 />
                 <span className="text-gray-600 text-[11px] leading-tight">{r.name}</span>
@@ -82,7 +82,7 @@ function Row({ color, type, label }) {
   return (
     <div className="flex items-center gap-2.5">
       {type === "dot" ? (
-        <div className="w-4 h-4 rounded-full flex-shrink-0 border-2 border-white shadow-sm"
+        <div className="w-4 h-4 rounded-full shrink-0 border-2 border-white shadow-sm"
           style={{ background: color }} />
       ) : type === "bus" ? (
         <svg width="16" height="16" viewBox="0 0 16 16">
