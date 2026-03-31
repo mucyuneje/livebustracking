@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/* ─── Resets ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root {
+  margin: 0; padding: 0;
+  height: 100%; width: 100%;
+  overflow: hidden;
+  background: #EFF6FF;
+}
+
+/* ─── Map container ─────────────────────────────────────── */
+.leaflet-container { background: #E8F0F7; }
+
+/* Subtle warmth + clarity boost on OSM tiles */
+.map-tiles-light {
+  filter: brightness(1.06) saturate(1.10) contrast(1.03);
+}
+
+/* ─── Popup: clean white card ───────────────────────────── */
+.kbus-popup .leaflet-popup-content-wrapper,
+.leaflet-popup-content-wrapper {
+  background: white !important;
+  color: #111827 !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 4px 6px -1px rgba(0,0,0,0.06),
+    0 12px 28px -4px rgba(0,0,0,0.11) !important;
+}
+.leaflet-popup-tip         { background: white !important; }
+.leaflet-popup-content     { margin: 14px 16px !important; }
+.leaflet-popup-close-button {
+  color: #9CA3AF !important;
+  top: 10px !important; right: 12px !important;
+  font-size: 18px !important;
+}
+.leaflet-popup-close-button:hover { color: #374151 !important; }
+
+/* ─── Attribution ───────────────────────────────────────── */
+.leaflet-control-attribution {
+  background: rgba(255,255,255,0.80) !important;
+  color: #9CA3AF !important;
+  font-size: 9px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px 0 0 0 !important;
+}
+.leaflet-attribution-flag { display: none !important; }
+
+/* ─── Zoom control ──────────────────────────────────────── */
+.leaflet-control-zoom a {
+  background: white !important;
+  color: #374151 !important;
+  border-color: rgba(0,0,0,0.10) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.10) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: #F9FAFB !important;
+  color: #111827 !important;
+}
+.leaflet-bar            { border: none !important; }
+.leaflet-control-zoom-in  { border-radius: 8px 8px 0 0 !important; }
+.leaflet-control-zoom-out { border-radius: 0 0 8px 8px !important; }
+
+/* ─── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 2px; }
+
+/* ─── Smooth touch scroll ───────────────────────────────── */
+.overflow-y-auto { -webkit-overflow-scrolling: touch; }
+
+/* ─── No outline on interactive map elements ────────────── */
+.leaflet-interactive:focus { outline: none; }
