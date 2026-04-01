@@ -1,54 +1,83 @@
 @import "tailwindcss";
 
-/* ── Map tile filter: brighter, lighter, saturated ── */
-.map-tiles-light {
-  filter: saturate(0.85) brightness(1.05);
-}
-
-/* ── Leaflet popup styles ── */
-.kbus-popup .leaflet-popup-content-wrapper {
-  border-radius: 16px !important;
-  padding: 0 !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14) !important;
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+/* ── Map base ────────────────────────────────────────────── */
+html, body, #root {
+  margin: 0; padding: 0;
+  height: 100%; width: 100%;
   overflow: hidden;
 }
-.kbus-popup .leaflet-popup-content {
-  margin: 14px 16px !important;
-}
-.kbus-popup .leaflet-popup-tip-container {
-  margin-top: -1px;
+
+.leaflet-container {
+  background: #f0f4f8;   /* matches Positron's pale background */
 }
 
-/* ── Attribution tuck ── */
+/* ── Tile brightness (applied via className on tileLayer) ── */
+.map-tile-layer {
+  filter: brightness(1.04) saturate(0.90) contrast(1.02);
+}
+
+/* ── Smooth zoom transition ────────────────────────────── */
+.leaflet-tile {
+  transition: opacity 0.22s ease !important;
+}
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.26s cubic-bezier(0.25,0.46,0.45,0.94) !important;
+}
+.leaflet-overlay-pane {
+  transition: opacity 0.22s ease;
+}
+
+/* ── Popups ─────────────────────────────────────────────── */
+.kbus-popup .leaflet-popup-content-wrapper {
+  border-radius: 14px !important;
+  padding: 0 !important;
+  box-shadow:
+    0 4px 6px -1px rgba(0,0,0,0.06),
+    0 10px 24px -4px rgba(0,0,0,0.12) !important;
+  border: 1px solid rgba(0,0,0,0.06) !important;
+  overflow: hidden;
+}
+.kbus-popup .leaflet-popup-content { margin: 13px 15px !important; }
+.kbus-popup .leaflet-popup-tip     { background: white !important; }
+.kbus-popup .leaflet-popup-close-button {
+  color: #9CA3AF !important; top:8px !important; right:10px !important;
+  font-size:17px !important;
+}
+.kbus-popup .leaflet-popup-close-button:hover { color:#374151 !important; }
+
+/* ── Return-direction tooltip ───────────────────────────── */
+.kbus-tooltip {
+  background: rgba(255,255,255,0.96) !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  border-radius: 7px !important;
+  font-size: 11px !important;
+  font-family: -apple-system, sans-serif !important;
+  color: #374151 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10) !important;
+  padding: 3px 9px !important;
+}
+.kbus-tooltip::before { display: none !important; }
+
+/* ── Attribution ────────────────────────────────────────── */
 .leaflet-control-attribution {
-  font-size: 9px !important;
-  opacity: 0.6;
+  font-size: 9px !important; opacity: 0.50;
+  background: rgba(255,255,255,0.72) !important;
+  padding: 2px 5px !important;
+  border-radius: 4px 0 0 0 !important;
+}
+.leaflet-attribution-flag { display: none !important; }
+
+/* ── Marker transitions ──────────────────────────────────── */
+.leaflet-marker-icon { transition: opacity 0.18s ease; }
+
+/* ── Mobile ──────────────────────────────────────────────── */
+* { -webkit-tap-highlight-color: transparent; }
+.leaflet-container:focus { outline: none !important; }
+@media (max-width: 640px) {
+  .leaflet-marker-icon { min-width: 28px; min-height: 28px; }
 }
 
-/* ── Smooth marker transitions ── */
-.leaflet-marker-icon {
-  transition: opacity 0.2s ease;
-}
-
-/* ── Prevent map focus ring ── */
-.leaflet-container:focus {
-  outline: none !important;
-}
-
-/* ── Mobile tap highlight removal ── */
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ── Custom scrollbar for bottom panel ── */
-.overflow-y-auto::-webkit-scrollbar {
-  width: 3px;
-}
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-}
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 2px;
-}
+/* ── Bottom panel scrollbar ──────────────────────────────── */
+.overflow-y-auto::-webkit-scrollbar       { width: 3px; }
+.overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
+.overflow-y-auto::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }

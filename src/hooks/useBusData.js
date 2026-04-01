@@ -1,62 +1,107 @@
 /**
- * useBusData.js — React hooks for geolocation, stops, and live buses.
+ * useBusData.js — v8
+ * - useGeolocation: explicit mobile permission request with prompt UI state
+ * - useNearestRoute: auto-selects closest route to user
+ * - useAllBusesLive: polls all routes every 3s
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  getBuses,
-  simulateBusMovement,
-  STOPS_BY_ROUTE,
-  ROUTES,
-  ALL_STOPS,
+  getBuses, simulateBusMovement,
+  STOPS_BY_ROUTE, ROUTES, ALL_STOPS,
 } from "../api/mockData";
 import { getNearbyStops, haversineKm } from "../utils/utils";
 
 const KIGALI_CENTER = { lat: -1.9441, lng: 30.0619 };
 
-// ─── Geolocation ──────────────────────────────────────────────
+// ─── Geolocation — asks permission explicitly, with state for UI ──
 export function useGeolocation() {
-  const [userLocation,  setUserLocation]  = useState(null);
-  const [locationError, setLocationError] = useState(null);
-  const [locating,      setLocating]      = useState(true);
+  const [userLocation,    setUserLocation]    = useState(null);
+  const [locationError,   setLocationError]   = useState(null);
+  const [locating,        setLocating]        = useState(false);
+  const [permissionState, setPermissionState] = useState("prompt"); // "prompt"|"granted"|"denied"
 
+  // Try to read permission state (supported in most browsers)
   useEffect(() => {
+    if (!navigator.permissions) return;
+    navigator.permissions.query({ name: "geolocation" }).then((result) => {
+      setPermissionState(result.state);
+      result.onchange = () => setPermissionState(result.state);
+    }).catch(() => {});
+  }, []);
+
+  const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setLocationError("Geolocation not supported");
+      setLocationError("Geolocation not supported on this device");
       setUserLocation(KIGALI_CENTER);
-      setLocating(false);
+      setPermissionState("denied");
       return;
     }
+    setLocating(true);
+    setLocationError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocating(false);
+        setPermissionState("granted");
       },
-      () => {
-        setLocationError("Location access denied — showing Kigali centre");
+      (err) => {
+        const msg =
+          err.code === 1 ? "Location permission denied" :
+          err.code === 2 ? "Location unavailable" :
+          "Location request timed out";
+        setLocationError(msg);
         setUserLocation(KIGALI_CENTER);
         setLocating(false);
+        setPermissionState("denied");
       },
-      { timeout: 8000, maximumAge: 30000 }
+      { timeout: 12000, maximumAge: 60000, enableHighAccuracy: true }
     );
   }, []);
 
-  return { userLocation, locationError, locating };
+  // Auto-request if already granted
+  useEffect(() => {
+    if (permissionState === "granted") {
+      requestLocation();
+    }
+  }, [permissionState]); // eslint-disable-line
+
+  return { userLocation, locationError, locating, permissionState, requestLocation };
 }
 
-// ─── Nearby stops (all routes) ────────────────────────────────
-export function useNearbyStops(userLocation, radiusKm = 3) {
-  const [nearbyStops, setNearbyStops] = useState([]);
+// ─── Auto-detect nearest route from user position ─────────────
+export function useNearestRoute(userLocation) {
+  const [nearestRouteId, setNearestRouteId] = useState(null);
 
   useEffect(() => {
     if (!userLocation) return;
-    const nearby = getNearbyStops(ALL_STOPS, userLocation.lat, userLocation.lng, radiusKm);
-    setNearbyStops(nearby);
-  }, [userLocation, radiusKm]);
+    let bestRouteId = null;
+    let bestDist = Infinity;
 
+    ROUTES.forEach((route) => {
+      const stops = STOPS_BY_ROUTE[route.id] ?? [];
+      stops.forEach((stop) => {
+        const d = haversineKm(userLocation.lat, userLocation.lng, stop.lat, stop.lng);
+        if (d < bestDist) { bestDist = d; bestRouteId = route.id; }
+      });
+    });
+
+    setNearestRouteId(bestRouteId);
+  }, [userLocation?.lat, userLocation?.lng]); // eslint-disable-line
+
+  return nearestRouteId;
+}
+
+// ─── Nearby stops ────────────────────────────────────────────
+export function useNearbyStops(userLocation, radiusKm = 3) {
+  const [nearbyStops, setNearbyStops] = useState([]);
+  useEffect(() => {
+    if (!userLocation) return;
+    setNearbyStops(getNearbyStops(ALL_STOPS, userLocation.lat, userLocation.lng, radiusKm));
+  }, [userLocation, radiusKm]);
   return nearbyStops;
 }
 
-// ─── All live buses, all routes, 10s polling ─────────────────
+// ─── All buses live, 3s polling ──────────────────────────────
 export function useAllBusesLive(userLocation) {
   const [buses,   setBuses]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +111,6 @@ export function useAllBusesLive(userLocation) {
       const results = await Promise.all(
         ROUTES.map(async (route) => {
           const stops = STOPS_BY_ROUTE[route.id] ?? [];
-          // ETA target = stop nearest to user on this route
           let target = stops[0];
           if (userLocation && stops.length) {
             target = stops.reduce((best, s) => {
@@ -98,14 +142,14 @@ export function useAllBusesLive(userLocation) {
     const id = setInterval(() => {
       simulateBusMovement();
       fetchAll();
-    }, 10_000);
+    }, 3000); // 3s refresh for smooth movement
     return () => clearInterval(id);
   }, [fetchAll]);
 
   return { buses, loading };
 }
 
-// ─── Buses for a specific stop (bottom panel) ─────────────────
+// ─── Buses for a specific stop ───────────────────────────────
 export function useBusesForStop(stop) {
   const [buses,       setBuses]       = useState([]);
   const [loading,     setLoading]     = useState(false);
@@ -126,18 +170,17 @@ export function useBusesForStop(stop) {
     } finally {
       setLoading(false);
     }
-  }, [stop?.id, stop?.routeId]);
+  }, [stop?.id, stop?.routeId]); // eslint-disable-line
 
   useEffect(() => { setBuses([]); fetch(); }, [fetch]);
-
   useEffect(() => {
     if (!stop) return;
     const id = setInterval(() => {
       simulateBusMovement();
       if (stopRef.current) fetch();
-    }, 10_000);
+    }, 3000);
     return () => clearInterval(id);
-  }, [stop?.id, fetch]);
+  }, [stop?.id, fetch]); // eslint-disable-line
 
   return { buses, loading, lastUpdated, refresh: fetch };
 }
