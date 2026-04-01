@@ -1,9 +1,7 @@
 /**
- * Home.jsx — v8
- * Full automation:
- * 1. On load → show location permission screen (mobile-friendly)
- * 2. After permission → detect location → auto-select nearest route
- * 3. Show map with buses on real roads
+ * Home.jsx — v10
+ * Wires: mapStyle switcher, map rotation (CSS transform),
+ * mobile permission splash, auto-route detection
  */
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import BusMap      from "../components/BusMap";
@@ -22,14 +20,12 @@ export default function Home() {
     permissionState, requestLocation,
   } = useGeolocation();
 
-  // Auto-detect nearest route
   const nearestRouteId = useNearestRoute(userLocation);
+  const nearbyStops    = useNearbyStops(userLocation, 3);
+  const nearestStopId  = nearbyStops[0]?.id ?? null;
+  const nearestStop    = nearbyStops[0] ?? null;
 
-  const nearbyStops   = useNearbyStops(userLocation, 3);
-  const nearestStopId = nearbyStops[0]?.id ?? null;
-  const nearestStop   = nearbyStops[0] ?? null;
-
-  const { buses, loading: busesLoading } = useAllBusesLive(userLocation);
+  const { buses, loading: busesLoading } = useAllBusesLive();
 
   const [selectedStop,  setSelectedStop]  = useState(null);
   const [showBuses,     setShowBuses]     = useState(true);
@@ -39,9 +35,13 @@ export default function Home() {
   const [goNearestTick, setGoNearestTick] = useState(0);
   const [autoRouteDone, setAutoRouteDone] = useState(false);
 
+  // New: map style + rotation
+  const [mapStyle,  setMapStyle]  = useState("light");   // "light"|"dark"|"satellite"
+  const [rotation,  setRotation]  = useState(0);         // degrees 0-360
+
   const mapRef = useRef(null);
 
-  // Auto-select nearest route once location is available
+  // Auto-select nearest route
   useEffect(() => {
     if (!autoRouteDone && nearestRouteId && userLocation) {
       setActiveRouteId(nearestRouteId);
@@ -52,88 +52,57 @@ export default function Home() {
   const handleRecenter  = useCallback(() => setRecenterTick((t) => t + 1), []);
   const handleGoNearest = useCallback(() => setGoNearestTick((t) => t + 1), []);
 
-  // ── Location permission splash screen ──────────────────────
+  // ── Permission splash ──────────────────────────────────────
   const needsPermission = permissionState === "prompt" && !userLocation && !locating;
 
   if (needsPermission) {
     return (
       <div
         className="fixed inset-0 flex flex-col items-center justify-center"
-        style={{
-          background: "linear-gradient(160deg, #1e3a5f 0%, #1a2d4a 40%, #0f1e33 100%)",
-        }}
+        style={{ background: "linear-gradient(160deg, #1e3a5f 0%, #1a2d4a 40%, #0f1e33 100%)" }}
       >
-        {/* Animated background dots */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full"
-              style={{
-                width:  `${80 + i * 40}px`,
-                height: `${80 + i * 40}px`,
-                left:   `${10 + i * 14}%`,
-                top:    `${20 + (i % 3) * 20}%`,
-                background: "rgba(37,99,235,0.08)",
-                animation: `pulse ${2 + i * 0.4}s ease-in-out infinite alternate`,
-                animationDelay: `${i * 0.3}s`,
-              }}
-            />
+            <div key={i} className="absolute rounded-full" style={{
+              width: `${80 + i * 40}px`, height: `${80 + i * 40}px`,
+              left: `${10 + i * 14}%`, top: `${20 + (i % 3) * 20}%`,
+              background: "rgba(37,99,235,0.08)",
+              animation: `kbpulse ${2 + i * 0.4}s ease-in-out infinite alternate`,
+              animationDelay: `${i * 0.3}s`,
+            }} />
           ))}
         </div>
 
-        {/* Card */}
-        <div
-          className="relative mx-6 rounded-3xl overflow-hidden"
+        <div className="relative mx-6 rounded-3xl overflow-hidden"
           style={{
             background: "rgba(255,255,255,0.06)",
             border: "1px solid rgba(255,255,255,0.12)",
-            backdropFilter: "blur(20px)",
-            maxWidth: 360,
-            width: "100%",
-          }}
-        >
-          {/* Header */}
+            backdropFilter: "blur(20px)", maxWidth: 360, width: "100%",
+          }}>
           <div className="px-8 pt-10 pb-6 text-center">
-            {/* Bus icon */}
-            <div
-              className="w-20 h-20 mx-auto mb-5 rounded-3xl flex items-center justify-center"
-              style={{
-                background: "linear-gradient(135deg, #2563EB, #1d4ed8)",
-                boxShadow: "0 8px 32px rgba(37,99,235,0.45)",
-              }}
-            >
-              <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <div className="w-20 h-20 mx-auto mb-5 rounded-3xl flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,#2563EB,#1d4ed8)", boxShadow: "0 8px 32px rgba(37,99,235,0.45)" }}>
+              <svg width="42" height="42" viewBox="0 0 42 42" fill="none">
                 <rect x="5" y="9" width="32" height="22" rx="5" fill="white" fillOpacity="0.95"/>
                 <rect x="8" y="13" width="9" height="6" rx="2" fill="#2563EB"/>
                 <rect x="25" y="13" width="9" height="6" rx="2" fill="#2563EB"/>
                 <rect x="18" y="13" width="6" height="6" rx="2" fill="#2563EB"/>
                 <circle cx="12" cy="33" r="4" fill="white" fillOpacity="0.9"/>
                 <circle cx="30" cy="33" r="4" fill="white" fillOpacity="0.9"/>
-                <rect x="5" y="28" width="32" height="4" rx="2" fill="white" fillOpacity="0.4"/>
               </svg>
             </div>
-
-            <h1 className="text-white font-black text-2xl tracking-tight mb-1">
-              KigaliBus Live
-            </h1>
-            <p className="text-blue-300 text-sm font-medium">
-              Real-time bus tracking
-            </p>
+            <h1 className="text-white font-black text-2xl tracking-tight mb-1">KigaliBus Live</h1>
+            <p className="text-blue-300 text-sm font-medium">Real-time bus tracking</p>
           </div>
 
-          {/* Divider */}
           <div style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
 
-          {/* Body */}
           <div className="px-8 py-6">
-            {/* Location icon */}
             <div className="flex items-start gap-4 mb-6">
-              <div
-                className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                style={{ background: "rgba(37,99,235,0.20)", border: "1px solid rgba(37,99,235,0.30)" }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ background: "rgba(37,99,235,0.20)", border: "1px solid rgba(37,99,235,0.30)" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="3"/>
                   <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
                   <circle cx="12" cy="12" r="8" strokeOpacity="0.4"/>
@@ -142,12 +111,10 @@ export default function Home() {
               <div>
                 <p className="text-white font-semibold text-sm mb-1">Allow Location Access</p>
                 <p className="text-blue-200 text-xs leading-relaxed opacity-80">
-                  KigaliBus needs your location to show nearby buses, detect your nearest route, and give accurate arrival times.
+                  KigaliBus needs your location to detect your nearest route and show live arrivals.
                 </p>
               </div>
             </div>
-
-            {/* Features */}
             {[
               { icon: "🚌", text: "Auto-detect your nearest bus route" },
               { icon: "⏱️", text: "Live ETAs to your closest stop" },
@@ -160,44 +127,29 @@ export default function Home() {
             ))}
           </div>
 
-          {/* CTA */}
           <div className="px-8 pb-8">
-            <button
-              onClick={requestLocation}
+            <button onClick={requestLocation}
               className="w-full py-4 rounded-2xl font-bold text-white text-base
                 transition-all duration-200 active:scale-95"
-              style={{
-                background: "linear-gradient(135deg, #2563EB, #1d4ed8)",
-                boxShadow: "0 6px 24px rgba(37,99,235,0.50)",
-              }}
-            >
+              style={{ background: "linear-gradient(135deg,#2563EB,#1d4ed8)", boxShadow: "0 6px 24px rgba(37,99,235,0.50)" }}>
               📍 Allow Location & Continue
             </button>
-
             <button
-              onClick={() => {
-                requestLocation();
-                // Force use Kigali center if denied
-                setTimeout(() => {
-                  if (!userLocation) setActiveRouteId(1);
-                }, 200);
-              }}
+              onClick={() => { requestLocation(); }}
               className="w-full mt-3 py-3 rounded-2xl font-medium text-blue-300 text-sm
                 transition-all duration-200 active:scale-95"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-            >
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
               Skip — Use Kigali Centre
             </button>
           </div>
         </div>
 
-        {/* Footer note */}
         <p className="mt-6 text-blue-400 text-xs opacity-60 text-center px-8">
           Your location is only used locally and never stored.
         </p>
 
         <style>{`
-          @keyframes pulse {
+          @keyframes kbpulse {
             from { transform: scale(1); opacity: 0.5; }
             to   { transform: scale(1.15); opacity: 1; }
           }
@@ -209,16 +161,12 @@ export default function Home() {
   // ── Loading screen ─────────────────────────────────────────
   if (locating) {
     return (
-      <div
-        className="fixed inset-0 flex flex-col items-center justify-center gap-4"
-        style={{ background: "linear-gradient(160deg, #1e3a5f 0%, #0f1e33 100%)" }}
-      >
-        <div
-          className="w-16 h-16 rounded-3xl flex items-center justify-center"
-          style={{ background: "rgba(37,99,235,0.20)", border: "1px solid rgba(37,99,235,0.35)" }}
-        >
-          <span className="w-7 h-7 border-3 border-blue-400 border-t-blue-600 rounded-full animate-spin"
-            style={{ borderWidth: 3 }} />
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4"
+        style={{ background: "linear-gradient(160deg,#1e3a5f 0%,#0f1e33 100%)" }}>
+        <div className="w-16 h-16 rounded-3xl flex items-center justify-center"
+          style={{ background: "rgba(37,99,235,0.20)", border: "1px solid rgba(37,99,235,0.35)" }}>
+          <span className="w-7 h-7 rounded-full animate-spin"
+            style={{ border: "3px solid rgba(96,165,250,0.4)", borderTopColor: "#2563EB" }} />
         </div>
         <p className="text-white font-semibold text-sm">Detecting your location…</p>
         <p className="text-blue-300 text-xs opacity-70">Finding nearest bus route</p>
@@ -227,30 +175,42 @@ export default function Home() {
   }
 
   // ── Main map ───────────────────────────────────────────────
+  // CSS rotation is applied to the map container.
+  // Overlays (TopBar, NavControls) are outside the rotated div
+  // so they stay upright.
   return (
     <div className="relative w-full" style={{ height: "100dvh", overflow: "hidden" }}>
 
-      <BusMap
-        ref={mapRef}
-        buses={buses}
-        allStops={ALL_STOPS}
-        userLocation={userLocation}
-        selectedStop={selectedStop}
-        nearestStopId={nearestStopId}
-        onStopSelect={setSelectedStop}
-        recenterTick={recenterTick}
-        goNearestTick={goNearestTick}
-        showBuses={showBuses}
-        searchQuery={searchQuery}
-        activeRouteId={activeRouteId}
-      />
+      {/* Rotatable map wrapper */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: rotation ? `rotate(${rotation}deg)` : undefined,
+          transformOrigin: "center center",
+          transition: "transform 0.25s ease",
+          // Expand slightly so corners don't show background when rotated
+          ...(rotation ? { inset: "-10%" } : {}),
+        }}
+      >
+        <BusMap
+          ref={mapRef}
+          buses={buses}
+          allStops={ALL_STOPS}
+          userLocation={userLocation}
+          selectedStop={selectedStop}
+          nearestStopId={nearestStopId}
+          onStopSelect={setSelectedStop}
+          recenterTick={recenterTick}
+          goNearestTick={goNearestTick}
+          showBuses={showBuses}
+          searchQuery={searchQuery}
+          activeRouteId={activeRouteId}
+          mapStyle={mapStyle}
+        />
+      </div>
 
-      <TopBar
-        locating={locating}
-        locationError={locationError}
-        onRecenter={handleRecenter}
-        activeRouteId={activeRouteId}
-      />
+      {/* UI overlays — NOT rotated, always upright */}
+      <TopBar locating={locating} locationError={locationError} onRecenter={handleRecenter} />
 
       <SearchBar
         onRouteFilter={setActiveRouteId}
@@ -266,35 +226,29 @@ export default function Home() {
         showBuses={showBuses}
         onToggleBuses={() => setShowBuses((v) => !v)}
         nearestStopName={nearestStop?.name}
+        mapStyle={mapStyle}
+        onMapStyleChange={setMapStyle}
+        rotation={rotation}
+        onRotationChange={setRotation}
       />
 
       {busesLoading && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-          z-20 pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
           <div className="px-5 py-3.5 rounded-2xl flex items-center gap-3"
-            style={{
-              background: "rgba(255,255,255,0.95)",
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
-              backdropFilter: "blur(16px)",
-            }}>
-            <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600
-              rounded-full animate-spin" />
+            style={{ background: "rgba(255,255,255,0.95)", border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.10)", backdropFilter: "blur(16px)" }}>
+            <span className="w-4 h-4 rounded-full animate-spin"
+              style={{ border: "2px solid #BFDBFE", borderTopColor: "#2563EB" }} />
             <span className="text-gray-600 text-sm font-medium">Loading buses…</span>
           </div>
         </div>
       )}
 
       {!selectedStop && !busesLoading && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20
-          pointer-events-none whitespace-nowrap">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap">
           <div className="px-4 py-2 rounded-full text-xs text-gray-500 flex items-center gap-2"
-            style={{
-              background: "rgba(255,255,255,0.90)",
-              border: "1px solid rgba(0,0,0,0.07)",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-              backdropFilter: "blur(10px)",
-            }}>
+            style={{ background: "rgba(255,255,255,0.90)", border: "1px solid rgba(0,0,0,0.07)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)", backdropFilter: "blur(10px)" }}>
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             Tap a bus stop to see live arrivals
           </div>

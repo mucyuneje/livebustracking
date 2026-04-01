@@ -1,97 +1,82 @@
 /**
- * useBusData.js — v8
- * - useGeolocation: explicit mobile permission request with prompt UI state
- * - useNearestRoute: auto-selects closest route to user
- * - useAllBusesLive: polls all routes every 3s
+ * useBusData.js — v10
+ * - useGeolocation: permission-aware, mobile-safe
+ * - useNearestRoute: auto picks closest route
+ * - useAllBusesLive: 2.5s polling for GPS-like smoothness
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  getBuses, simulateBusMovement,
-  STOPS_BY_ROUTE, ROUTES, ALL_STOPS,
+  getBuses, getAllBuses, simulateBusMovement,
+  OUTBOUND_STOPS, ROUTES, ALL_STOPS,
 } from "../api/mockData";
 import { getNearbyStops, haversineKm } from "../utils/utils";
 
 const KIGALI_CENTER = { lat: -1.9441, lng: 30.0619 };
 
-// ─── Geolocation — asks permission explicitly, with state for UI ──
+// ─── useGeolocation ──────────────────────────────────────────
 export function useGeolocation() {
   const [userLocation,    setUserLocation]    = useState(null);
   const [locationError,   setLocationError]   = useState(null);
   const [locating,        setLocating]        = useState(false);
-  const [permissionState, setPermissionState] = useState("prompt"); // "prompt"|"granted"|"denied"
-
-  // Try to read permission state (supported in most browsers)
-  useEffect(() => {
-    if (!navigator.permissions) return;
-    navigator.permissions.query({ name: "geolocation" }).then((result) => {
-      setPermissionState(result.state);
-      result.onchange = () => setPermissionState(result.state);
-    }).catch(() => {});
-  }, []);
+  const [permissionState, setPermissionState] = useState("prompt");
 
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setLocationError("Geolocation not supported on this device");
+      setPermissionState("unsupported");
+      setLocationError("Geolocation not supported");
       setUserLocation(KIGALI_CENTER);
-      setPermissionState("denied");
       return;
     }
     setLocating(true);
-    setLocationError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
         setPermissionState("granted");
+        setLocating(false);
       },
       (err) => {
-        const msg =
-          err.code === 1 ? "Location permission denied" :
-          err.code === 2 ? "Location unavailable" :
-          "Location request timed out";
+        const msg = err.code === 1 ? "Location permission denied"
+          : err.code === 2 ? "Location unavailable"
+          : "Location request timed out";
         setLocationError(msg);
         setUserLocation(KIGALI_CENTER);
-        setLocating(false);
         setPermissionState("denied");
+        setLocating(false);
       },
       { timeout: 12000, maximumAge: 60000, enableHighAccuracy: true }
     );
   }, []);
 
-  // Auto-request if already granted
+  // On mount — check existing permission state
   useEffect(() => {
-    if (permissionState === "granted") {
-      requestLocation();
+    if (!navigator.geolocation) {
+      setPermissionState("unsupported");
+      setUserLocation(KIGALI_CENTER);
+      return;
     }
-  }, [permissionState]); // eslint-disable-line
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: "geolocation" }).then((result) => {
+        if (result.state === "granted") {
+          setPermissionState("granted");
+          requestLocation();
+        } else if (result.state === "denied") {
+          setPermissionState("denied");
+          setLocationError("Location access denied — showing Kigali centre");
+          setUserLocation(KIGALI_CENTER);
+        } else {
+          setPermissionState("prompt");
+        }
+        result.onchange = () => setPermissionState(result.state);
+      }).catch(() => setPermissionState("prompt"));
+    } else {
+      setPermissionState("prompt");
+    }
+  }, []); // eslint-disable-line
 
   return { userLocation, locationError, locating, permissionState, requestLocation };
 }
 
-// ─── Auto-detect nearest route from user position ─────────────
-export function useNearestRoute(userLocation) {
-  const [nearestRouteId, setNearestRouteId] = useState(null);
-
-  useEffect(() => {
-    if (!userLocation) return;
-    let bestRouteId = null;
-    let bestDist = Infinity;
-
-    ROUTES.forEach((route) => {
-      const stops = STOPS_BY_ROUTE[route.id] ?? [];
-      stops.forEach((stop) => {
-        const d = haversineKm(userLocation.lat, userLocation.lng, stop.lat, stop.lng);
-        if (d < bestDist) { bestDist = d; bestRouteId = route.id; }
-      });
-    });
-
-    setNearestRouteId(bestRouteId);
-  }, [userLocation?.lat, userLocation?.lng]); // eslint-disable-line
-
-  return nearestRouteId;
-}
-
-// ─── Nearby stops ────────────────────────────────────────────
+// ─── useNearbyStops ─────────────────────────────────────────
 export function useNearbyStops(userLocation, radiusKm = 3) {
   const [nearbyStops, setNearbyStops] = useState([]);
   useEffect(() => {
@@ -101,55 +86,57 @@ export function useNearbyStops(userLocation, radiusKm = 3) {
   return nearbyStops;
 }
 
-// ─── All buses live, 3s polling ──────────────────────────────
-export function useAllBusesLive(userLocation) {
+// ─── useNearestRoute ────────────────────────────────────────
+export function useNearestRoute(userLocation) {
+  const [nearestRouteId, setNearestRouteId] = useState(null);
+  useEffect(() => {
+    if (!userLocation) return;
+    let bestRouteId = null, bestDist = Infinity;
+    ROUTES.forEach((route) => {
+      (OUTBOUND_STOPS[route.id] ?? []).forEach((stop) => {
+        const d = haversineKm(userLocation.lat, userLocation.lng, stop.lat, stop.lng);
+        if (d < bestDist) { bestDist = d; bestRouteId = route.id; }
+      });
+    });
+    setNearestRouteId(bestRouteId);
+  }, [userLocation]); // eslint-disable-line
+  return nearestRouteId;
+}
+
+// ─── useAllBusesLive — 2.5s polling for smooth GPS movement ─
+export function useAllBusesLive() {
   const [buses,   setBuses]   = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     try {
-      const results = await Promise.all(
-        ROUTES.map(async (route) => {
-          const stops = STOPS_BY_ROUTE[route.id] ?? [];
-          let target = stops[0];
-          if (userLocation && stops.length) {
-            target = stops.reduce((best, s) => {
-              const d  = haversineKm(userLocation.lat, userLocation.lng, s.lat, s.lng);
-              const bd = haversineKm(userLocation.lat, userLocation.lng, best.lat, best.lng);
-              return d < bd ? s : best;
-            }, stops[0]);
-          }
-          const buses = await getBuses(route.id, target?.id);
-          return buses.map((b) => ({
-            ...b,
-            routeColor: route.color,
-            routeName:  route.name,
-            shortCode:  route.shortCode,
-          }));
-        })
-      );
-      setBuses(results.flat());
+      const raw = await getAllBuses();
+      setBuses(raw.map((b) => {
+        const route = ROUTES.find((r) => r.id === b.routeId);
+        return { ...b, routeColor: route?.color, routeName: route?.name, shortCode: route?.shortCode };
+      }));
     } catch (e) {
       console.error("Bus fetch error:", e);
     } finally {
       setLoading(false);
     }
-  }, [userLocation]);
+  }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
+    // 2.5s: fast enough for smooth movement, not too heavy
     const id = setInterval(() => {
       simulateBusMovement();
       fetchAll();
-    }, 3000); // 3s refresh for smooth movement
+    }, 2500);
     return () => clearInterval(id);
   }, [fetchAll]);
 
   return { buses, loading };
 }
 
-// ─── Buses for a specific stop ───────────────────────────────
+// ─── useBusesForStop ─────────────────────────────────────────
 export function useBusesForStop(stop) {
   const [buses,       setBuses]       = useState([]);
   const [loading,     setLoading]     = useState(false);
@@ -161,15 +148,12 @@ export function useBusesForStop(stop) {
     if (!stop) return;
     setLoading(true);
     try {
-      const data = await getBuses(stop.routeId, stop.id);
+      const data  = await getBuses(stop.routeId, stop.id);
       const route = ROUTES.find((r) => r.id === stop.routeId);
       setBuses(data.map((b) => ({ ...b, routeColor: route?.color, routeName: route?.name })));
       setLastUpdated(new Date());
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, [stop?.id, stop?.routeId]); // eslint-disable-line
 
   useEffect(() => { setBuses([]); fetch(); }, [fetch]);
@@ -178,7 +162,7 @@ export function useBusesForStop(stop) {
     const id = setInterval(() => {
       simulateBusMovement();
       if (stopRef.current) fetch();
-    }, 3000);
+    }, 2500);
     return () => clearInterval(id);
   }, [stop?.id, fetch]); // eslint-disable-line
 
