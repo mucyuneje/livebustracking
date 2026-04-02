@@ -3,11 +3,11 @@
  * Light theme. Shows top-3 buses with ETA + notify.
  */
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Bus, MessageSquare, RefreshCw, CheckCircle } from "lucide-react";
+import { X, MapPin, Bus, RefreshCw } from "lucide-react";
 import { useBusesForStop } from "../hooks/useBusData";
 import {
   sortByEta, formatEta, formatDistance, formatTime,
-  etaColor, etaBadgeBg, etaColorClass, buildSmsMessage,
+  etaColor, etaBadgeBg, etaColorClass,
 } from "../utils/utils";
 import { ROUTES } from "../api/mockData";
 
@@ -26,12 +26,6 @@ export default function BottomPanel({ stop, onClose }) {
   const route = ROUTES.find((r) => r.id === stop.routeId);
   const color = route?.color ?? "#2563EB";
   const top3  = sortByEta(buses).slice(0, 3);
-
-  const handleNotify = (bus) => {
-    alert(`📱 SMS Sent!\n\n${buildSmsMessage(bus.id, bus.etaToNextStop, stop.name)}`);
-    setNotifiedBus(bus.id);
-    setTimeout(() => setNotifiedBus(null), 4000);
-  };
 
   const handleClose = () => { setVisible(false); setTimeout(onClose, 280); };
 
@@ -199,23 +193,6 @@ export default function BottomPanel({ stop, onClose }) {
                         )}
                       </div>
                     </div>
-
-                    {/* Notify */}
-                    <button
-                      onClick={() => handleNotify(bus)}
-                      className="flex-shrink-0 flex items-center gap-1.5 rounded-xl
-                        px-3 py-2 text-xs font-semibold transition-all duration-200 border"
-                      style={isNotified ? {
-                        background: "#DCFCE7", border: "1px solid #86EFAC", color: "#16A34A",
-                      } : {
-                        background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#6B7280",
-                      }}
-                    >
-                      {isNotified
-                        ? <><CheckCircle size={13} /> Sent!</>
-                        : <><MessageSquare size={13} /> Notify</>
-                      }
-                    </button>
                   </div>
                 );
               })

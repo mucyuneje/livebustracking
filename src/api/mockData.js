@@ -162,6 +162,28 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+
+// ─── Bus status helpers (Feature 2: State-Aware Markers) ────
+const STOP_PROXIMITY_M = 10; // metres — "at a stop" threshold
+
+/**
+ * Compute busStatus for a bus.
+ * "STOPPED" : speed is 0 OR within STOP_PROXIMITY_M of any stop on its route
+ * "GOING"   : otherwise
+ */
+function computeBusStatus(bus, routeId) {
+  if (bus.speed === 0) return "STOPPED";
+  const allStops = [
+    ...(OUTBOUND_STOPS[routeId] ?? []),
+    ...(INBOUND_STOPS[routeId] ?? []),
+  ];
+  const nearStop = allStops.some((s) => {
+    const dM = haversineKm(bus.lat, bus.lng, s.lat, s.lng) * 1000;
+    return dM <= STOP_PROXIMITY_M;
+  });
+  return nearStop ? "STOPPED" : "GOING";
+}
+
 function calcEta(busLat, busLng, busSpeed, stopLat, stopLng) {
   const d = haversineKm(busLat, busLng, stopLat, stopLng);
   return Math.max(1, Math.round(d / (Math.max(busSpeed, 5) / 60)));
@@ -184,6 +206,7 @@ function makeInitialBus(id, routeId, direction, wpIdx) {
     capacityPct: Math.round(Math.random() * 75 + 10),
     // t tracks fractional progress between current and next waypoint (0–1)
     t: Math.random(),
+    busStatus: "GOING",  // initial default
   };
 }
 
@@ -305,6 +328,7 @@ export function simulateBusMovement() {
         speed: Math.round(targetSpeed),
         odometer: Math.round(odometer * 10) / 10,
         capacityPct: cap,
+        busStatus: computeBusStatus({ lat, lng, speed: Math.round(targetSpeed) }, routeId),
       };
     });
   });
@@ -323,6 +347,7 @@ export async function getBuses(routeId, stopId) {
     ...b,
     etaToNextStop: calcEta(b.lat, b.lng, b.speed, target?.lat ?? b.lat, target?.lng ?? b.lng),
     targetStop: target?.name ?? "—",
+    busStatus: b.busStatus ?? "GOING",
   }));
 }
 
@@ -336,6 +361,7 @@ export async function getAllBuses() {
       etaToNextStop: calcEta(b.lat, b.lng, b.speed,
         nearestStop?.lat ?? b.lat, nearestStop?.lng ?? b.lng),
       targetStop: nearestStop?.name ?? "—",
+      busStatus: b.busStatus ?? "GOING",
     };
   });
 }

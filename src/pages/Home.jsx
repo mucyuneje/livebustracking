@@ -12,7 +12,8 @@ import SearchBar   from "../components/SearchBar";
 import {
   useGeolocation, useNearbyStops, useAllBusesLive, useNearestRoute,
 } from "../hooks/useBusData";
-import { ALL_STOPS } from "../api/mockData";
+import { ALL_STOPS, ROUTES } from "../api/mockData";
+import ProximityEngine from "../components/ProximityEngine";
 
 export default function Home() {
   const {
@@ -256,6 +257,14 @@ export default function Home() {
       )}
 
       <BottomPanel stop={selectedStop} onClose={() => setSelectedStop(null)} />
+
+      {/* Feature 1: Proximity Engine — automated alerts when bus ≤ 3 min away */}
+      <ProximityEngine
+        buses={buses}
+        userLocation={userLocation}
+        activeRouteId={activeRouteId}
+        routes={ROUTES}
+      />
     </div>
   );
 }
